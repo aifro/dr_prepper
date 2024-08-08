@@ -193,3 +193,4 @@ if user_input:
         response = generate_response(st.session_state.thread_id, ASSISTANT_IDS[st.session_state.stage], user_input, st.session_state.stage)
     st.session_state.messages.append({"role": "assistant", "content": response})
     st.rerun()
+    
