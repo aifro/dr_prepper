@@ -3,3 +3,4 @@ openai>=1.0.0
 markdown
 markdown2==2.4.3
 weasyprint==52.5
+python-dotenv

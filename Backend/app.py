@@ -30,6 +30,8 @@ import json
 from openai import OpenAI
 import io
 from markdown2 import Markdown
+from dotenv import load_dotenv
+load_dotenv()
 try:
     from weasyprint import HTML, CSS
     FontConfiguration = None
