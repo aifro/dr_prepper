@@ -60,6 +60,35 @@ STAGE_TITLES = {
     "stage5": "Stage 5: Summary for your doctor"
 }
 
+# Import SerpAPI library
+import os
+from serpapi import GoogleSearch
+
+# Get SerpAPI key from environment variable
+SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
+if not SERPAPI_API_KEY:
+    st.error("SerpAPI key is not set. Please set the SERPAPI_API_KEY environment variable.")
+    st.stop()
+
+# Define SerpAPI search function
+def search_google(query, search_type=None):
+    try:
+        params = {
+            "engine": "google",
+            "q": query,
+            "api_key": SERPAPI_API_KEY
+        }
+        if search_type == "statistics":
+            params["tbm"] = "stats"
+        elif search_type == "treatments":
+            params["tbm"] = "med"
+        search = GoogleSearch(params)
+        results = search.get_dict()
+        return results
+    except Exception as e:
+        st.error(f"Error in Google search: {str(e)}")
+        return {"error": str(e)}
+
 def generate_response(thread_id, assistant_id, prompt, stage):
     try:
         stage_instructions = {
@@ -83,9 +112,38 @@ def generate_response(thread_id, assistant_id, prompt, stage):
             assistant_id=assistant_id
         )
 
-        while run.status != "completed":
+        while run.status not in ["completed", "failed"]:
             time.sleep(0.5)
             run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+            
+            if run.status == "requires_action":
+                tool_calls = run.required_action.submit_tool_outputs.tool_calls
+                tool_outputs = []
+                for tool_call in tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    
+                    if function_name == "search_statistics":
+                        output = search_google(function_args["condition"], "statistics")
+                    elif function_name == "search_treatments":
+                        output = search_google(function_args["condition"], "treatments")
+                    else:
+                        output = f"Error: Unknown function {function_name}"
+                    
+                    tool_outputs.append({
+                        "tool_call_id": tool_call.id,
+                        "output": json.dumps(output)
+                    })
+                
+                client.beta.threads.runs.submit_tool_outputs(
+                    thread_id=thread_id,
+                    run_id=run.id,
+                    tool_outputs=tool_outputs
+                )
+
+        if run.status == "failed":
+            st.error(f"Run failed: {run.last_error}")
+            return None
 
         messages = client.beta.threads.messages.list(thread_id=thread_id)
         for message in messages:
