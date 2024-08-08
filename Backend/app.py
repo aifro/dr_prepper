@@ -29,7 +29,6 @@ import time
 import json
 from openai import OpenAI
 import io
-from markdown2 import Markdown
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -55,7 +54,7 @@ STAGE_TITLES = {
     "stage0": "Fill this out to begin",
     "stage1": "Stage 1: Initial Assessment",
     "stage2": "Stage 2: Possible Diagnoses",
-    "stage3": "Stage 3: Narrowing Down Diagnoses",
+    "stage3": "Stage 3: Probability of Diagnoses",
     "stage4": "Stage 4: Treatment Options",
     "stage5": "Stage 5: Summary for your doctor"
 }
@@ -198,6 +197,45 @@ def create_pdf(summary):
     pdf.output(pdf_output)
     pdf_output.seek(0)
     return pdf_output
+
+# Add this near the top of your file, after the imports
+if 'disclaimer_accepted' not in st.session_state:
+    st.session_state.disclaimer_accepted = False
+
+# Add this function after the imports and before the main code
+def show_disclaimer():
+    disclaimer_text = """
+    **Disclaimer**
+
+    1. This tool uses AI-generated content and is not a substitute for professional medical advice. It is designed to help you prepare for your doctor's visit. Only a qualified healthcare professional can provide accurate medical advice.
+
+    2. While we do not store your data or request personal information, any information you provide is processed by OpenAI. Although OpenAI is considered secure and trusted, there is always a potential risk of data breaches. To minimize risk, please do not provide any personally identifiable information.
+
+    By using this site, you acknowledge that:
+    - This is not professional medical advice
+    - You understand the potential risks associated with data processing by third parties
+    - You will not provide any personally identifiable information (e.g., name, email, phone number, medical records)
+    - You use this site at your own risk and discretion
+    """
+    
+    st.markdown(disclaimer_text)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        agree_medical = st.checkbox("I understand this is not medical advice")
+    with col2:
+        agree_privacy = st.checkbox("I agree not to provide any personal identifiable information")
+    
+    if st.button("I Agree", disabled=not (agree_medical and agree_privacy)):
+        st.session_state.disclaimer_accepted = True
+        st.experimental_rerun()
+    
+    if not st.session_state.disclaimer_accepted:
+        st.stop()
+
+# Add this check right after the above function
+if 'disclaimer_accepted' not in st.session_state or not st.session_state.disclaimer_accepted:
+    show_disclaimer()
 
 st.title("Health Assistant Chatbot")
 
