@@ -7,31 +7,16 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stApp {
-        margin-bottom: 120px;
+        margin-bottom: 0px;
     }
-    .chat-container {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 80%;
-        background-color: white;
-        padding: 1rem;
-        z-index: 1000;
-        box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
-        display: flex;
-        flex-direction: column;
+    .stSidebar {
+        background-color: #2E2E2E;
     }
-    .chat-input {
-        width: 100%;
-        margin-bottom: 10px;
-    }
-    .button-container {
-        display: flex;
-        justify-content: space-between;
+    .stSidebar [data-testid="stMarkdownContainer"] {
+        color: white;
     }
     .stButton button {
-        width: 48%;
+        width: 100%;
     }
 </style>
 """, unsafe_allow_html=True)
