@@ -84,6 +84,7 @@ def search_google(query, search_type=None):
             params["tbm"] = "med"
         search = GoogleSearch(params)
         results = search.get_dict()
+        st.write(f"Search results for '{query}' (type: {search_type}):", results)
         return results
     except Exception as e:
         st.error(f"Error in Google search: {str(e)}")
@@ -117,11 +118,14 @@ def generate_response(thread_id, assistant_id, prompt, stage):
             run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
             
             if run.status == "requires_action":
+                st.write("Function call required")
                 tool_calls = run.required_action.submit_tool_outputs.tool_calls
                 tool_outputs = []
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args = json.loads(tool_call.function.arguments)
+                    st.write(f"Function called: {function_name}")
+                    st.write(f"Arguments: {function_args}")
                     
                     if function_name == "search_statistics":
                         output = search_google(function_args["condition"], "statistics")
@@ -135,6 +139,7 @@ def generate_response(thread_id, assistant_id, prompt, stage):
                         "output": json.dumps(output)
                     })
                 
+                st.write("Submitting tool outputs:", tool_outputs)
                 client.beta.threads.runs.submit_tool_outputs(
                     thread_id=thread_id,
                     run_id=run.id,
@@ -283,3 +288,9 @@ if user_input:
         response = generate_response(st.session_state.thread_id, ASSISTANT_IDS[st.session_state.stage], user_input, st.session_state.stage)
     st.session_state.messages.append({"role": "assistant", "content": response})
     st.rerun()
+
+assistant3 = client.beta.assistants.retrieve(ASSISTANT_IDS["stage3"])
+assistant4 = client.beta.assistants.retrieve(ASSISTANT_IDS["stage4"])
+
+st.write("Assistant 3 configuration:", assistant3)
+st.write("Assistant 4 configuration:", assistant4)
