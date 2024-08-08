@@ -76,16 +76,24 @@ def search_google(query, search_type=None):
         params = {
             "engine": "google",
             "q": query,
-            "api_key": SERPAPI_API_KEY
+            "api_key": SERPAPI_API_KEY,
+            "num": 5  # Limit to 5 results
         }
-        if search_type == "statistics":
-            params["tbm"] = "stats"
-        elif search_type == "treatments":
-            params["tbm"] = "med"
         search = GoogleSearch(params)
         results = search.get_dict()
         st.write(f"Search results for '{query}' (type: {search_type}):", results)
-        return results
+        
+        # Extract and return relevant information
+        organic_results = results.get('organic_results', [])
+        extracted_results = [
+            {
+                'title': result.get('title'),
+                'link': result.get('link'),
+                'snippet': result.get('snippet')
+            }
+            for result in organic_results
+        ]
+        return extracted_results
     except Exception as e:
         st.error(f"Error in Google search: {str(e)}")
         return {"error": str(e)}
@@ -127,10 +135,8 @@ def generate_response(thread_id, assistant_id, prompt, stage):
                     st.write(f"Function called: {function_name}")
                     st.write(f"Arguments: {function_args}")
                     
-                    if function_name == "search_statistics":
-                        output = search_google(function_args["condition"], "statistics")
-                    elif function_name == "search_treatments":
-                        output = search_google(function_args["condition"], "treatments")
+                    if function_name in ["search_statistics", "search_treatments"]:
+                        output = search_google(f"{function_args['condition']} {function_args['treatment_type']}")
                     else:
                         output = f"Error: Unknown function {function_name}"
                     
