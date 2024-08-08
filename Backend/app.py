@@ -32,16 +32,16 @@ import io
 from markdown2 import Markdown
 from dotenv import load_dotenv
 load_dotenv()
-try:
-    from weasyprint import HTML, CSS
-    FontConfiguration = None
-except ImportError as e:
-    st.error(f"WeasyPrint import error: {str(e)}")
-    st.error("PDF generation will not be available.")
-    HTML = None
-    CSS = None
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+if not os.getenv("OPENAI_API_KEY"):
+    st.error("OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable.")
+    st.stop()
+
+try:
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+except Exception as e:
+    st.error(f"Error initializing OpenAI client: {str(e)}")
+    st.stop()
 
 ASSISTANT_IDS = {
     "stage1": "asst_a9s6wbqUHXkbIX2vTj5DstO1",
@@ -97,37 +97,24 @@ def generate_response(thread_id, assistant_id, prompt, stage):
         return None
 
 def create_pdf(summary):
-    if HTML is None or CSS is None:
-        st.error("PDF generation is not available due to missing dependencies.")
-        return None
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
     
-    # Convert markdown to HTML
-    markdowner = Markdown()
-    html_content = markdowner.convert(summary)
+    # Add title
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="Health Summary", ln=1, align='C')
+    pdf.ln(10)
     
-    # Wrap the HTML content in a basic HTML structure with some CSS
-    html = f"""
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
-            h1 {{ color: #333366; }}
-            h2 {{ color: #666699; }}
-        </style>
-    </head>
-    <body>
-        <h1>Health Summary</h1>
-        {html_content}
-    </body>
-    </html>
-    """
+    # Add content
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 10, txt=summary)
     
-    # Generate PDF
-    css = CSS(string='@page { size: letter; margin: 1cm }')
-    pdf_file = io.BytesIO()
-    HTML(string=html).write_pdf(pdf_file, stylesheets=[css])
-    pdf_file.seek(0)
-    return pdf_file
+    # Save the pdf to a BytesIO object
+    pdf_output = io.BytesIO()
+    pdf.output(pdf_output)
+    pdf_output.seek(0)
+    return pdf_output
 
 st.title("Health Assistant Chatbot")
 
