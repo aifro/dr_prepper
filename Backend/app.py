@@ -178,23 +178,30 @@ def generate_response(thread_id, assistant_id, prompt, stage):
         st.error(f"An error occurred: {str(e)}")
         return None
 
+from fpdf import FPDF
+import io
+
 def create_pdf(summary):
-    pdf = FPDF()
+    class PDF(FPDF):
+        def header(self):
+            self.set_font('Arial', 'B', 12)
+            self.cell(0, 10, 'Health Summary', 0, 1, 'C')
+
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('Arial', 'I', 8)
+            self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+    pdf = PDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     
-    # Add title
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="Health Summary", ln=1, align='C')
-    pdf.ln(10)
-    
     # Add content
-    pdf.set_font("Arial", size=12)
     pdf.multi_cell(0, 10, txt=summary)
     
     # Save the pdf to a BytesIO object
     pdf_output = io.BytesIO()
-    pdf.output(pdf_output)
+    pdf_output.write(pdf.output())
     pdf_output.seek(0)
     return pdf_output
 

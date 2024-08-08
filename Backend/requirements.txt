@@ -6,3 +6,4 @@ weasyprint==52.5
 python-dotenv
 google-search-results==2.4.2
 markdown2==2.4.8
+fpdf2==2.7.4
