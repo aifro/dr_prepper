@@ -43,6 +43,15 @@ os.environ['STREAMLIT_SERVER_PORT'] = '8502'
 import time
 import json
 from openai import OpenAI
+import io
+from markdown2 import Markdown
+try:
+    from weasyprint import HTML, CSS
+    FontConfiguration = None  # We'll remove this as it's not needed in newer versions
+except ImportError as e:
+    st.error(f"WeasyPrint import error: {str(e)}")
+    HTML = None
+    CSS = None
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -98,6 +107,39 @@ def generate_response(thread_id, assistant_id, prompt, stage):
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
         return None
+
+def create_pdf(summary):
+    if HTML is None:
+        st.error("PDF generation is not available due to missing dependencies.")
+        return None
+    
+    # Convert markdown to HTML
+    markdowner = Markdown()
+    html_content = markdowner.convert(summary)
+    
+    # Wrap the HTML content in a basic HTML structure with some CSS
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+            h1 {{ color: #333366; }}
+            h2 {{ color: #666699; }}
+        </style>
+    </head>
+    <body>
+        <h1>Health Summary</h1>
+        {html_content}
+    </body>
+    </html>
+    """
+    
+    # Generate PDF
+    css = CSS(string='@page { size: letter; margin: 1cm }')
+    pdf_file = io.BytesIO()
+    HTML(string=html).write_pdf(pdf_file, stylesheets=[css])
+    pdf_file.seek(0)
+    return pdf_file
 
 st.title("Health Assistant Chatbot")
 
@@ -170,19 +212,32 @@ with col1:
         st.rerun()
 
 with col2:
-    next_stage = f"stage{int(st.session_state.stage[-1]) + 1}"
-    next_stage_title = STAGE_TITLES.get(next_stage, "Finish")
-    if st.button(f"Continue to {next_stage_title}", key="continue_button"):
-        current_stage = int(st.session_state.stage[-1])
-        if current_stage < 5:
-            st.session_state.stage = next_stage
-            summary_prompt = f"Provide a summary for {next_stage_title}. Start your summary with 'Summary for {next_stage_title}:'"
-            with st.spinner("Generating summary..."):
-                summary = generate_response(st.session_state.thread_id, ASSISTANT_IDS[next_stage], summary_prompt, next_stage)
-            st.session_state.messages.append({"role": "assistant", "content": summary})
-        else:
-            st.success("All stages completed!")
-        st.rerun()
+    if st.session_state.stage == "stage5":
+        if st.button("Download your Summary", key="download_summary"):
+            summary = next((msg['content'] for msg in reversed(st.session_state.messages) if msg['role'] == 'assistant'), None)
+            if summary:
+                pdf = create_pdf(summary)
+                if pdf:
+                    st.download_button(
+                        label="Click here to download your summary",
+                        data=pdf,
+                        file_name="health_summary.pdf",
+                        mime="application/pdf"
+                    )
+            else:
+                st.error("No summary available to download.")
+    else:
+        next_stage = f"stage{int(st.session_state.stage[-1]) + 1}"
+        next_stage_title = STAGE_TITLES.get(next_stage, "Finish")
+        if st.button(f"Continue to {next_stage_title}", key="continue_button"):
+            current_stage = int(st.session_state.stage[-1])
+            if current_stage < 5:
+                st.session_state.stage = next_stage
+                summary_prompt = f"Provide a summary for {next_stage_title}. Start your summary with 'Summary for {next_stage_title}:'"
+                with st.spinner("Generating summary..."):
+                    summary = generate_response(st.session_state.thread_id, ASSISTANT_IDS[next_stage], summary_prompt, next_stage)
+                st.session_state.messages.append({"role": "assistant", "content": summary})
+            st.rerun()
 
 st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
