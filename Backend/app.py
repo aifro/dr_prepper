@@ -32,9 +32,10 @@ import io
 from markdown2 import Markdown
 try:
     from weasyprint import HTML, CSS
-    FontConfiguration = None  # We'll remove this as it's not needed in newer versions
+    FontConfiguration = None
 except ImportError as e:
     st.error(f"WeasyPrint import error: {str(e)}")
+    st.error("PDF generation will not be available.")
     HTML = None
     CSS = None
 
@@ -94,7 +95,7 @@ def generate_response(thread_id, assistant_id, prompt, stage):
         return None
 
 def create_pdf(summary):
-    if HTML is None:
+    if HTML is None or CSS is None:
         st.error("PDF generation is not available due to missing dependencies.")
         return None
     
@@ -209,6 +210,8 @@ with col2:
                         file_name="health_summary.pdf",
                         mime="application/pdf"
                     )
+                else:
+                    st.error("PDF generation failed. Please try again later.")
             else:
                 st.error("No summary available to download.")
     else:

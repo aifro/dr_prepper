@@ -1,0 +1,9 @@
+streamlit
+openai>=1.0.0
+markdown
+markdown2==2.4.3
+weasyprint==52.5
+libcairo2-dev
+libpango1.0-dev
+libgdk-pixbuf2.0-dev
+shared-mime-info
