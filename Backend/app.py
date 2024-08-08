@@ -110,6 +110,10 @@ def generate_response(thread_id, assistant_id, prompt, stage):
         
         full_prompt = f"Current stage: {stage}. Instructions: {stage_instructions.get(stage, '')}. User input: {prompt}"
         
+        st.write(f"Starting response generation for stage: {stage}")
+        st.write(f"Assistant ID: {assistant_id}")
+        st.write(f"Prompt: {full_prompt}")
+        
         client.beta.threads.messages.create(
             thread_id=thread_id,
             role="user",
@@ -136,9 +140,19 @@ def generate_response(thread_id, assistant_id, prompt, stage):
                     st.write(f"Arguments: {function_args}")
                     
                     if function_name in ["search_statistics", "search_treatments"]:
-                        output = search_google(f"{function_args['condition']} {function_args['treatment_type']}")
+                        try:
+                            condition = function_args.get('condition', '')
+                            treatment_type = function_args.get('treatment_type', '')
+                            query = f"{condition} {treatment_type}".strip()
+                            output = search_google(query)
+                            st.write(f"Search results for query: {query}")
+                            st.write(output)
+                        except Exception as e:
+                            output = {"error": f"Error in search function: {str(e)}"}
+                            st.error(f"Error in search function: {str(e)}")
                     else:
-                        output = f"Error: Unknown function {function_name}"
+                        output = {"error": f"Unknown function {function_name}"}
+                        st.error(f"Unknown function: {function_name}")
                     
                     tool_outputs.append({
                         "tool_call_id": tool_call.id,
@@ -295,8 +309,49 @@ if user_input:
     st.session_state.messages.append({"role": "assistant", "content": response})
     st.rerun()
 
-assistant3 = client.beta.assistants.retrieve(ASSISTANT_IDS["stage3"])
-assistant4 = client.beta.assistants.retrieve(ASSISTANT_IDS["stage4"])
+# Update assistants for stages 3 and 4
+client.beta.assistants.update(
+    assistant_id=ASSISTANT_IDS["stage3"],
+    tools=[{
+        "type": "function",
+        "function": {
+            "name": "search_statistics",
+            "description": "Search for medical statistics",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "condition": {
+                        "type": "string",
+                        "description": "The medical condition to search statistics for"
+                    }
+                },
+                "required": ["condition"]
+            }
+        }
+    }]
+)
 
-st.write("Assistant 3 configuration:", assistant3)
-st.write("Assistant 4 configuration:", assistant4)
+client.beta.assistants.update(
+    assistant_id=ASSISTANT_IDS["stage4"],
+    tools=[{
+        "type": "function",
+        "function": {
+            "name": "search_treatments",
+            "description": "Search for medical treatments",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "condition": {
+                        "type": "string",
+                        "description": "The medical condition to search treatments for"
+                    },
+                    "treatment_type": {
+                        "type": "string",
+                        "description": "The type of treatment to search for (e.g., medication, therapy, surgery)"
+                    }
+                },
+                "required": ["condition", "treatment_type"]
+            }
+        }
+    }]
+)
