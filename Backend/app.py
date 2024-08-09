@@ -109,8 +109,6 @@ STAGE_TITLES = {
     "stage5": "Stage 5: Summary for your doctor"
 }
 
-# Import SerpAPI library
-from serpapi import GoogleSearch
 
 # Get SerpAPI key from environment variable
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
