@@ -109,43 +109,6 @@ STAGE_TITLES = {
     "stage5": "Stage 5: Summary for your doctor"
 }
 
-# Import SerpAPI library
-from serpapi import GoogleSearch
-
-# Get SerpAPI key from environment variable
-SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
-if not SERPAPI_API_KEY:
-    st.error("SerpAPI key is not set. Please set the SERPAPI_API_KEY environment variable.")
-    st.stop()
-
-# Define SerpAPI search function
-def search_google(query, search_type=None):
-    try:
-        params = {
-            "engine": "google",
-            "q": query,
-            "api_key": SERPAPI_API_KEY,
-            "num": 5  # Limit to 5 results
-        }
-        search = GoogleSearch(params)
-        results = search.get_dict()
-        st.write(f"Search results for '{query}' (type: {search_type}):", results)
-        
-        # Extract and return relevant information
-        organic_results = results.get('organic_results', [])
-        extracted_results = [
-            {
-                'title': result.get('title'),
-                'link': result.get('link'),
-                'snippet': result.get('snippet')
-            }
-            for result in organic_results
-        ]
-        return extracted_results
-    except Exception as e:
-        st.error(f"Error in Google search: {str(e)}")
-        return {"error": str(e)}
-
 def generate_response(thread_id, assistant_id, prompt, stage):
     try:
         stage_instructions = {
