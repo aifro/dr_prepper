@@ -4,7 +4,7 @@ markdown
 markdown2==2.4.8
 python-dotenv
 google-search-results==2.4.2
-fpdf2==2.7.4
+
 python-docx==0.8.11
 cffi==1.15.1
 cairocffi==1.4.0
