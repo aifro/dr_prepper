@@ -4,8 +4,6 @@ markdown
 markdown2==2.4.8
 python-dotenv
 python-docx==0.8.11
-cffi==1.15.1
-cairocffi==1.4.0
 tinycss2==1.1.1
 cssselect2==0.6.0
 pyphen==0.11.0
