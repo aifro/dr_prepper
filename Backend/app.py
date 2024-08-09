@@ -109,6 +109,8 @@ STAGE_TITLES = {
     "stage5": "Stage 5: Summary for your doctor"
 }
 
+# Import SerpAPI library
+from serpapi import GoogleSearch
 
 # Get SerpAPI key from environment variable
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
@@ -290,7 +292,7 @@ def show_disclaimer():
     
     if st.button("I Agree", disabled=not (agree_medical and agree_privacy)):
         st.session_state.disclaimer_accepted = True
-        st.experimental_rerun()
+        st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
     
     if not st.session_state.disclaimer_accepted:
         st.stop()
