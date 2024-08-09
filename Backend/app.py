@@ -1,5 +1,5 @@
 import streamlit as st
-st.set_page_config(page_title="Health Assistant Chatbot", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Dr Prepper Chatbot", page_icon="🏥", layout="wide")
 
 # Custom CSS to improve layout
 st.markdown("""
@@ -17,6 +17,56 @@ st.markdown("""
     }
     .stButton button {
         width: 100%;
+    }
+    .sidebar-stage {
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+        width: 100%;
+        text-align: left;
+        display: block;
+    }
+    .sidebar-stage.current {
+        background-color: orange;
+        color: white;
+    }
+    .sidebar-stage.completed {
+        background-color: white;
+        color: black;
+    }
+    .sidebar-stage.upcoming {
+        background-color: #f0f0f0;
+        color: #888888;
+        cursor: not-allowed;
+    }
+    .stButton.orange button {
+        background-color: orange;
+        color: white;
+    }
+    /* Chat input styling */
+    .stChatInputContainer {
+        padding: 10px;
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        border: 2px solid #4CAF50;
+        margin-top: 20px;
+    }
+
+    .stChatInputContainer textarea {
+        border: none !important;
+        background-color: white !important;
+        color: #333 !important;
+        font-size: 16px !important;
+        padding: 10px !important;
+        border-radius: 5px !important;
+    }
+
+    .stChatInputContainer .stButton > button {
+        border-radius: 20px !important;
+        background-color: #4CAF50 !important;
+        color: white !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -144,7 +194,7 @@ def generate_response(thread_id, assistant_id, prompt, stage):
         messages = client.beta.threads.messages.list(thread_id=thread_id)
         for message in messages:
             if message.role == "assistant":
-                return message.content[0].text.value
+                return {"role": "assistant", "content": message.content[0].text.value, "stage": stage}
 
     except Exception as e:
         st.error(f"An error occurred while generating the response: {str(e)}")
@@ -251,7 +301,7 @@ def show_disclaimer():
 if 'disclaimer_accepted' not in st.session_state or not st.session_state.disclaimer_accepted:
     show_disclaimer()
 
-st.title("Health Assistant Chatbot")
+st.title("Dr Prepper Chatbot")
 
 if "stage" not in st.session_state:
     st.session_state.stage = "stage0"
@@ -265,12 +315,30 @@ if "messages" not in st.session_state:
 if "user_info" not in st.session_state:
     st.session_state.user_info = None
 
+if "max_stage" not in st.session_state:
+    st.session_state.max_stage = 0
+
 st.sidebar.title("Stages")
-for stage, title in STAGE_TITLES.items():
-    if stage == st.session_state.stage:
-        st.sidebar.markdown(f"**{title}**")
+
+def sidebar_stage_button(title, stage, current_stage, max_stage):
+    stage_num = int(stage[-1]) if stage != "stage0" else 0
+    current_num = int(current_stage[-1]) if current_stage != "stage0" else 0
+    
+    if stage_num == current_num:
+        st.sidebar.markdown(f'<div class="sidebar-stage current">{title}</div>', unsafe_allow_html=True)
+    elif stage_num < current_num:
+        if st.sidebar.button(title, key=f"sidebar_{stage}", help="Click to go to this stage"):
+            st.session_state.stage = stage
+            st.session_state.max_stage = stage_num
+            st.rerun()
+    elif stage_num <= max_stage:
+        st.sidebar.markdown(f'<div class="sidebar-stage completed">{title}</div>', unsafe_allow_html=True)
     else:
-        st.sidebar.markdown(title)
+        st.sidebar.markdown(f'<div class="sidebar-stage upcoming">{title}</div>', unsafe_allow_html=True)
+
+# Display stages in the sidebar
+for stage, title in STAGE_TITLES.items():
+    sidebar_stage_button(title, stage, st.session_state.stage, st.session_state.max_stage)
 
 if st.session_state.stage == "stage0":
     st.write("Please fill out this form to begin:")
@@ -297,31 +365,48 @@ if st.session_state.stage == "stage0":
                 "sleep_hours": sleep_hours
             }
             st.session_state.stage = "stage1"
+            st.session_state.max_stage = 1
             initial_prompt = f"User information: {json.dumps(st.session_state.user_info)}. Please provide an initial assessment based on this information and ask for the user's consent to proceed."
             with st.spinner("Processing your information..."):
                 response = generate_response(st.session_state.thread_id, ASSISTANT_IDS["stage1"], initial_prompt, "stage1")
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.session_state.messages.append(response)
             st.rerun()
 
-# Display chat messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+else:
+    # Display chat messages for the current stage
+    for message in st.session_state.messages:
+        if int(message.get("stage", "0")[-1]) <= int(st.session_state.stage[-1]):
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-# Chat container at the bottom
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-
-user_input = st.chat_input("Type your message here...")
-
-st.markdown('<div class="button-container">', unsafe_allow_html=True)
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("Reset Chat", key="reset_chat"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
-
-with col2:
+    # Continue button
+    current_stage = int(st.session_state.stage[-1])
+    if current_stage < st.session_state.max_stage:
+        next_stage = f"stage{current_stage + 1}"
+        next_stage_title = STAGE_TITLES.get(next_stage, "Finish")
+        st.markdown('<div class="stButton orange">', unsafe_allow_html=True)
+        if st.button(f"Continue to {next_stage_title}", key="continue_button"):
+            st.session_state.stage = next_stage
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    elif current_stage < 5:
+        next_stage = f"stage{current_stage + 1}"
+        next_stage_title = STAGE_TITLES.get(next_stage, "Finish")
+        st.markdown('<div class="stButton orange">', unsafe_allow_html=True)
+        if st.button(f"Continue to {next_stage_title}", key="continue_button"):
+            st.session_state.stage = next_stage
+            st.session_state.max_stage = current_stage + 1
+            summary_prompt = f"Provide a summary for {next_stage_title}. Start your summary with 'Summary for {next_stage_title}:'"
+            with st.spinner("Generating summary..."):
+                summary = generate_response(st.session_state.thread_id, ASSISTANT_IDS[next_stage], summary_prompt, next_stage)
+            if summary:
+                st.session_state.messages.append(summary)
+                st.rerun()
+            else:
+                st.error("Failed to generate summary. Please try again.")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Word document download button for the final stage
     if st.session_state.stage == "stage5":
         if st.button("Download Word Document", key="download_word"):
             # Retrieve the summary content from the assistant's messages
@@ -339,30 +424,25 @@ with col2:
                     st.error("Word document generation failed. Please try again later.")
             else:
                 st.error("No summary available to download.")
-    else:
-        next_stage = f"stage{int(st.session_state.stage[-1]) + 1}"
-        next_stage_title = STAGE_TITLES.get(next_stage, "Finish")
-        if st.button(f"Continue to {next_stage_title}", key="continue_button"):
-            current_stage = int(st.session_state.stage[-1])
-            if current_stage < 5:
-                st.session_state.stage = next_stage
-                summary_prompt = f"Provide a summary for {next_stage_title}. Start your summary with 'Summary for {next_stage_title}:'"
-                with st.spinner("Generating summary..."):
-                    summary = generate_response(st.session_state.thread_id, ASSISTANT_IDS[next_stage], summary_prompt, next_stage)
-                if summary:
-                    # Clear previous messages and only show the new summary
-                    st.session_state.messages = [{"role": "assistant", "content": summary}]
-                    st.rerun()
-                else:
-                    st.error("Failed to generate summary. Please try again.")
+
+# Chat container at the bottom
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+
+user_input = st.chat_input("Type your message here...")
+
+st.markdown('<div class="button-container">', unsafe_allow_html=True)
+col1, col2 = st.columns(2)
+with col1:
+    pass  # Remove the Reset Chat button
 
 st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.session_state.messages.append({"role": "user", "content": user_input, "stage": st.session_state.stage})
     with st.spinner("Generating response..."):
         response = generate_response(st.session_state.thread_id, ASSISTANT_IDS[st.session_state.stage], user_input, st.session_state.stage)
-    st.session_state.messages.append({"role": "assistant", "content": response})
-    st.rerun()
+    if response:
+        st.session_state.messages.append(response)
+        st.rerun()
 
