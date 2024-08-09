@@ -1,0 +1,22 @@
+{
+  "name": "search_treatments",
+  "description": "Search for medical treatments",
+  "strict": false,
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "condition": {
+        "type": "string",
+        "description": "The medical condition to search treatments for"
+      },
+      "treatment_type": {
+        "type": "string",
+        "description": "The type of treatment to search for (e.g., medication, therapy, surgery)"
+      }
+    },
+    "required": [
+      "condition",
+      "treatment_type"
+    ]
+  }
+}

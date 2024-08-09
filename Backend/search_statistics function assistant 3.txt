@@ -1,0 +1,17 @@
+{
+  "name": "search_statistics",
+  "description": "Search for medical statistics",
+  "strict": false,
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "condition": {
+        "type": "string",
+        "description": "The medical condition to search statistics for"
+      }
+    },
+    "required": [
+      "condition"
+    ]
+  }
+}

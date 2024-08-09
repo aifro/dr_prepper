@@ -60,7 +60,6 @@ STAGE_TITLES = {
 }
 
 # Import SerpAPI library
-import os
 from serpapi import GoogleSearch
 
 # Get SerpAPI key from environment variable
@@ -102,69 +101,42 @@ def generate_response(thread_id, assistant_id, prompt, stage):
         stage_instructions = {
             "stage1": "Provide an initial assessment based on the user's information.",
             "stage2": "Determine the top 5 possible diagnoses based on the information provided.",
-            "stage3": "Analyze the 5 possible diagnoses and rank them from most to least likely. Present this in a markdown table.",
-            "stage4": "Provide the top 3 treatment options for each diagnosis.",
+            "stage3": "Analyze the 5 possible diagnoses and rank them from most to least likely. Use your knowledge and the context provided to estimate probabilities. Present this in a markdown table format. Do not use any external data sources.",
+            "stage4": "Provide the top 3 treatment options for each diagnosis based on general medical knowledge.",
             "stage5": "Summarize all information for the doctor."
         }
         
-        full_prompt = f"Current stage: {stage}. Instructions: {stage_instructions.get(stage, '')}. User input: {prompt}"
-        
-        st.write(f"Starting response generation for stage: {stage}")
-        st.write(f"Assistant ID: {assistant_id}")
-        st.write(f"Prompt: {full_prompt}")
+        # For stage 3, include a summary of previous diagnoses only
+        if stage == "stage3":
+            previous_messages = client.beta.threads.messages.list(thread_id=thread_id)
+            diagnoses = next((msg.content[0].text.value for msg in reversed(previous_messages.data) if msg.role == "assistant" and "Possible Diagnoses:" in msg.content[0].text.value), "")
+            context = f"Previous diagnoses:\n{diagnoses}\n\n"
+            full_prompt = f"{context}Current stage: {stage}. Instructions: {stage_instructions.get(stage, '')}. User input: {prompt}"
+        else:
+            full_prompt = f"Current stage: {stage}. Instructions: {stage_instructions.get(stage, '')}. User input: {prompt}"
         
         client.beta.threads.messages.create(
             thread_id=thread_id,
             role="user",
             content=full_prompt
         )
-
+        
         run = client.beta.threads.runs.create(
             thread_id=thread_id,
             assistant_id=assistant_id
         )
-
+        
+        # Add a timeout mechanism
+        start_time = time.time()
+        timeout = 120  # 120 seconds timeout
+        
         while run.status not in ["completed", "failed"]:
-            time.sleep(0.5)
+            if time.time() - start_time > timeout:
+                st.error("Response generation timed out. Please try again.")
+                return None
+            time.sleep(1)  # Increase sleep time to reduce API calls
             run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
             
-            if run.status == "requires_action":
-                st.write("Function call required")
-                tool_calls = run.required_action.submit_tool_outputs.tool_calls
-                tool_outputs = []
-                for tool_call in tool_calls:
-                    function_name = tool_call.function.name
-                    function_args = json.loads(tool_call.function.arguments)
-                    st.write(f"Function called: {function_name}")
-                    st.write(f"Arguments: {function_args}")
-                    
-                    if function_name in ["search_statistics", "search_treatments"]:
-                        try:
-                            condition = function_args.get('condition', '')
-                            treatment_type = function_args.get('treatment_type', '')
-                            query = f"{condition} {treatment_type}".strip()
-                            output = search_google(query)
-                            st.write(f"Search results for query: {query}")
-                            st.write(output)
-                        except Exception as e:
-                            output = {"error": f"Error in search function: {str(e)}"}
-                            st.error(f"Error in search function: {str(e)}")
-                    else:
-                        output = {"error": f"Unknown function {function_name}"}
-                        st.error(f"Unknown function: {function_name}")
-                    
-                    tool_outputs.append({
-                        "tool_call_id": tool_call.id,
-                        "output": json.dumps(output)
-                    })
-                
-                st.write("Submitting tool outputs:", tool_outputs)
-                client.beta.threads.runs.submit_tool_outputs(
-                    thread_id=thread_id,
-                    run_id=run.id,
-                    tool_outputs=tool_outputs
-                )
-
         if run.status == "failed":
             st.error(f"Run failed: {run.last_error}")
             return None
@@ -175,35 +147,70 @@ def generate_response(thread_id, assistant_id, prompt, stage):
                 return message.content[0].text.value
 
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
+        st.error(f"An error occurred while generating the response: {str(e)}")
         return None
 
-from fpdf import FPDF
+from docx import Document
+from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
+import markdown2
+from bs4 import BeautifulSoup
 
-def create_pdf(summary):
-    class PDF(FPDF):
-        def header(self):
-            self.set_font('Arial', 'B', 12)
-            self.cell(0, 10, 'Health Summary', 0, 1, 'C')
+def add_paragraph_with_style(doc, text, style):
+    paragraph = doc.add_paragraph(text)
+    paragraph.style = style
 
-        def footer(self):
-            self.set_y(-15)
-            self.set_font('Arial', 'I', 8)
-            self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+def process_list_items(doc, items, style):
+    for item in items:
+        add_paragraph_with_style(doc, item.get_text(), style)
+        nested_ul = item.find('ul')
+        nested_ol = item.find('ol')
+        if nested_ul:
+            process_list_items(doc, nested_ul.find_all('li'), 'List Bullet')
+        if nested_ol:
+            process_list_items(doc, nested_ol.find_all('li'), 'List Number')
 
-    pdf = PDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
+def create_word_doc(summary):
+    doc = Document()
     
-    # Add content
-    pdf.multi_cell(0, 10, txt=summary)
+    # Add a title
+    doc.add_heading('Health Summary', 0)
+
+    # Convert markdown to HTML
+    html = markdown2.markdown(summary)
     
-    # Save the pdf to a BytesIO object
-    pdf_output = io.BytesIO()
-    pdf_output.write(pdf.output())
-    pdf_output.seek(0)
-    return pdf_output
+    # Parse HTML and convert to Word elements
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    for element in soup:
+        if element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+            level = int(element.name[1])
+            doc.add_heading(element.get_text(), level)
+        elif element.name == 'p':
+            doc.add_paragraph(element.get_text())
+        elif element.name == 'ul':
+            process_list_items(doc, element.find_all('li'), 'List Bullet')
+        elif element.name == 'ol':
+            process_list_items(doc, element.find_all('li'), 'List Number')
+        elif element.name == 'table':
+            data = []
+            for tr in element.find_all('tr'):
+                row = []
+                for td in tr.find_all(['td', 'th']):
+                    row.append(td.get_text())
+                data.append(row)
+            table = doc.add_table(rows=len(data), cols=len(data[0]))
+            table.style = 'Table Grid'
+            for i, row in enumerate(data):
+                for j, cell in enumerate(row):
+                    table.cell(i, j).text = cell
+
+    # Save the document to a BytesIO object
+    doc_output = io.BytesIO()
+    doc.save(doc_output)
+    doc_output.seek(0)
+    return doc_output
 
 # Add this near the top of your file, after the imports
 if 'disclaimer_accepted' not in st.session_state:
@@ -316,19 +323,20 @@ with col1:
 
 with col2:
     if st.session_state.stage == "stage5":
-        if st.button("Download your Summary", key="download_summary"):
+        if st.button("Download Word Document", key="download_word"):
+            # Retrieve the summary content from the assistant's messages
             summary = next((msg['content'] for msg in reversed(st.session_state.messages) if msg['role'] == 'assistant'), None)
             if summary:
-                pdf = create_pdf(summary)
-                if pdf:
+                doc = create_word_doc(summary)
+                if doc:
                     st.download_button(
-                        label="Click here to download your summary",
-                        data=pdf,
-                        file_name="health_summary.pdf",
-                        mime="application/pdf"
+                        label="Click here to download Word Document",
+                        data=doc,
+                        file_name="health_summary.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
                 else:
-                    st.error("PDF generation failed. Please try again later.")
+                    st.error("Word document generation failed. Please try again later.")
             else:
                 st.error("No summary available to download.")
     else:
@@ -341,8 +349,12 @@ with col2:
                 summary_prompt = f"Provide a summary for {next_stage_title}. Start your summary with 'Summary for {next_stage_title}:'"
                 with st.spinner("Generating summary..."):
                     summary = generate_response(st.session_state.thread_id, ASSISTANT_IDS[next_stage], summary_prompt, next_stage)
-                st.session_state.messages.append({"role": "assistant", "content": summary})
-            st.rerun()
+                if summary:
+                    # Clear previous messages and only show the new summary
+                    st.session_state.messages = [{"role": "assistant", "content": summary}]
+                    st.rerun()
+                else:
+                    st.error("Failed to generate summary. Please try again.")
 
 st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
@@ -354,49 +366,3 @@ if user_input:
     st.session_state.messages.append({"role": "assistant", "content": response})
     st.rerun()
 
-# Update assistants for stages 3 and 4
-client.beta.assistants.update(
-    assistant_id=ASSISTANT_IDS["stage3"],
-    tools=[{
-        "type": "function",
-        "function": {
-            "name": "search_statistics",
-            "description": "Search for medical statistics",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "condition": {
-                        "type": "string",
-                        "description": "The medical condition to search statistics for"
-                    }
-                },
-                "required": ["condition"]
-            }
-        }
-    }]
-)
-
-client.beta.assistants.update(
-    assistant_id=ASSISTANT_IDS["stage4"],
-    tools=[{
-        "type": "function",
-        "function": {
-            "name": "search_treatments",
-            "description": "Search for medical treatments",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "condition": {
-                        "type": "string",
-                        "description": "The medical condition to search treatments for"
-                    },
-                    "treatment_type": {
-                        "type": "string",
-                        "description": "The type of treatment to search for (e.g., medication, therapy, surgery)"
-                    }
-                },
-                "required": ["condition", "treatment_type"]
-            }
-        }
-    }]
-)
