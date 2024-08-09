@@ -442,3 +442,7 @@ if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input, "stage": st.session_state.stage})
     with st.spinner("Generating response..."):
         response = generate_response(st.session_state.thread_id, ASSISTANT_IDS[st.session_state.stage], user_input, st.session_state.stage)
+    if response:
+        st.session_state.messages.append(response)
+        st.rerun()
+
